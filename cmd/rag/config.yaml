@@ -1,0 +1,24 @@
+# RAG 知识库系统配置文件
+# 所有配置都可通过环境变量覆盖
+
+# 服务器配置
+SERVER_ADDR: localhost:8080
+
+# Milvus 配置
+MILVUS_ADDR: localhost:19530
+MILVUS_COLLECTION: documents
+MILVUS_DIMENSION: 768
+MILVUS_INDEX_TYPE: HNSW
+
+# Embedding 配置
+EMBEDDING_PROVIDER: ollama
+EMBEDDING_MODEL: nomic-embed-text
+OLLAMA_URL: http://localhost:11434
+
+# 数据库配置
+DB_PATH: ./data/rag.db
+
+# LLM 配置（用于生成回答）
+LLM_PROVIDER: openai
+LLM_MODEL: gpt-4o-mini
+OPENAI_API_KEY: your-api-key-here
