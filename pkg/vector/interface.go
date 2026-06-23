@@ -1,0 +1,31 @@
+package vector
+
+import (
+	"context"
+)
+
+type VectorClient interface {
+	Close() error
+	CreateCollection(ctx context.Context, indexType string) error
+	DropCollection(ctx context.Context) error
+	HasCollection(ctx context.Context) (bool, error)
+	ListCollections(ctx context.Context) ([]string, error)
+	CreateIndex(ctx context.Context, indexType string, params map[string]string) error
+	Insert(ctx context.Context, id int64, vector []float32, text string, metadata map[string]interface{}) error
+	BatchInsert(ctx context.Context, ids []int64, vectors [][]float32, texts []string, metadatas []string) error
+	GetByID(ctx context.Context, id int64) (*SearchResult, error)
+	Search(ctx context.Context, queryVector []float32, limit int, params map[string]string) ([]SearchResult, error)
+	DeleteByID(ctx context.Context, ids []int64) error
+	Flush(ctx context.Context) error
+}
+
+// NewVectorClient 创建向量客户端
+// 参数:
+//   - cfg: 配置信息
+//   - useMilvus: true 使用真实 Milvus，false 使用内存存储
+func NewVectorClient(cfg Config, useMilvus bool) (VectorClient, error) {
+	if useMilvus {
+		return NewClient(cfg) // 使用真实 Milvus
+	}
+	return NewInMemoryClient(cfg) // 使用内存存储
+}
