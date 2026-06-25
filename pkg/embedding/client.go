@@ -197,3 +197,11 @@ func (c *Client) GetDimension() int {
 		return 768 // Ollama 默认
 	}
 }
+
+// TextChunk 文本片段（用于 RAG 召回）
+type TextChunk struct {
+	Text   string  `json:"text"`   // 文本内容
+	Score  float32 `json:"score"`  // 相似度分数
+	Source string  `json:"source"` // 来源文档
+	Index  int     `json:"index"`  // 在文档中的位置
+}

@@ -8,34 +8,35 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golllm/cmd/rag/llm"
 	"github.com/golllm/cmd/rag/model"
 	"github.com/golllm/cmd/rag/prompt"
 	"github.com/golllm/cmd/rag/repository"
 	"github.com/golllm/pkg/embedding"
 	"github.com/golllm/pkg/vector"
-
-	"github.com/sashabaranov/go-openai"
 )
 
+// RAGService RAG 问答服务
 type RAGService struct {
 	ctx       context.Context
 	embedder  *embedding.Client
 	vectorDB  vector.VectorClient
 	repo      *repository.SQLiteRepository
 	prompt    *prompt.RAGPromptTemplate
-	llmClient *openai.Client
+	llmClient llm.Client
+	topK      int
+	minScore  float32
 }
 
+// NewRAGService 创建 RAG 服务
 func NewRAGService(
 	embedder *embedding.Client,
 	vectorDB vector.VectorClient,
 	repo *repository.SQLiteRepository,
-	ollamaURL string,
+	llmClient llm.Client,
+	topK int,
+	minScore float32,
 ) *RAGService {
-	llmConfig := openai.DefaultConfig("ollama")
-	llmConfig.BaseURL = ollamaURL + "/v1"
-	llmClient := openai.NewClientWithConfig(llmConfig)
-
 	return &RAGService{
 		ctx:       context.Background(),
 		embedder:  embedder,
@@ -43,6 +44,8 @@ func NewRAGService(
 		repo:      repo,
 		prompt:    prompt.NewRAGPromptTemplate(),
 		llmClient: llmClient,
+		topK:      topK,
+		minScore:  minScore,
 	}
 }
 
@@ -64,7 +67,7 @@ func (s *RAGService) Ask(req *model.AskRequest) (*model.AskResponse, error) {
 	// 3. 召回相关文档
 	topK := req.TopK
 	if topK <= 0 {
-		topK = 5
+		topK = s.topK
 	}
 	references, err := s.Recall(req.Question, topK)
 	if err != nil {
@@ -85,7 +88,7 @@ func (s *RAGService) Ask(req *model.AskRequest) (*model.AskResponse, error) {
 	}
 
 	// 5. 构建消息列表
-	messages := make([]openai.ChatCompletionMessage, 0)
+	messages := make([]llm.Message, 0)
 
 	// 添加历史消息（限制最近 10 条）
 	startIdx := 0
@@ -93,36 +96,27 @@ func (s *RAGService) Ask(req *model.AskRequest) (*model.AskResponse, error) {
 		startIdx = len(history) - 10
 	}
 	for _, msg := range history[startIdx:] {
-		messages = append(messages, openai.ChatCompletionMessage{
+		messages = append(messages, llm.Message{
 			Role:    msg.Role,
 			Content: msg.Content,
 		})
 	}
 
 	// 添加当前对话
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleSystem,
+	messages = append(messages, llm.Message{
+		Role:    "system",
 		Content: systemPrompt,
 	})
-	messages = append(messages, openai.ChatCompletionMessage{
-		Role:    openai.ChatMessageRoleUser,
+	messages = append(messages, llm.Message{
+		Role:    "user",
 		Content: userPrompt,
 	})
 
 	// 6. 调用大模型
-	resp, err := s.llmClient.CreateChatCompletion(
-		s.ctx,
-		openai.ChatCompletionRequest{
-			Model:    openai.GPT4oMini,
-			Messages: messages,
-		},
-	)
+	answer, err := s.llmClient.Chat(s.ctx, messages)
 	if err != nil {
-		// 如果是本地模型，尝试使用 Ollama
-		return s.askWithLocalModel(sessionID, req, references)
+		return nil, fmt.Errorf("LLM 调用失败: %w", err)
 	}
-
-	answer := resp.Choices[0].Message.Content
 
 	// 7. 保存对话记录
 	s.repo.CreateMessage(&model.ChatMessage{
@@ -151,52 +145,7 @@ func (s *RAGService) Ask(req *model.AskRequest) (*model.AskResponse, error) {
 		Question:   req.Question,
 		Answer:     answer,
 		References: references,
-		Cost:       resp.Usage.TotalTokens,
-	}, nil
-}
-
-// askWithLocalModel 使用本地模型问答
-func (s *RAGService) askWithLocalModel(sessionID string, req *model.AskRequest, references []model.Reference) (*model.AskResponse, error) {
-	// 构建完整的 prompt
-	fullPrompt, _ := s.prompt.BuildFullPrompt(req.Question, references)
-
-	resp, err := s.llmClient.CreateChatCompletion(
-		s.ctx,
-		openai.ChatCompletionRequest{
-			Model: "llama3.2",
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: fullPrompt,
-				},
-			},
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("大模型调用失败: %w", err)
-	}
-
-	answer := resp.Choices[0].Message.Content
-
-	// 保存对话记录
-	s.repo.CreateMessage(&model.ChatMessage{
-		SessionID:  sessionID,
-		Role:       model.RoleUser,
-		Content:    req.Question,
-		References: references,
-	})
-	s.repo.CreateMessage(&model.ChatMessage{
-		SessionID: sessionID,
-		Role:      model.RoleAssistant,
-		Content:   answer,
-	})
-
-	return &model.AskResponse{
-		SessionID:  sessionID,
-		Question:   req.Question,
-		Answer:     answer,
-		References: references,
-		Cost:       resp.Usage.TotalTokens,
+		Cost:       0, // 本地模型不计 token
 	}, nil
 }
 

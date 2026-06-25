@@ -1,0 +1,33 @@
+# RAG 知识库系统配置文件
+# 复制此文件为 config.toml 并修改相应配置
+
+# ===== 服务器配置 =====
+[server]
+host = "0.0.0.0"
+port = 8080
+
+# ===== 向量数据库配置 =====
+[vector]
+type = "milvus"          # 可选: milvus, memory
+addr = "localhost:19530"  # Milvus 地址
+collection = "documents"   # 集合名称
+dim = 768                # 向量维度 (nomic-embed-text=768, bge-m3=1024)
+
+# ===== Embedding 模型配置 =====
+[embedding]
+provider = "ollama"       # 可选: ollama, openai, deepseek
+model = "nomic-embed-text"
+# api_key = ""           # API Key (通过环境变量 OPENAI_API_KEY 设置)
+# base_url = ""          # 自定义 API 地址
+
+# ===== LLM 模型配置 =====
+[llm]
+provider = "ollama"      # 可选: ollama, openai, deepseek
+model = "qwen2.5:7b"     # Ollama 模型名
+# api_key = ""           # API Key (通过环境变量 OPENAI_API_KEY 设置)
+# base_url = ""          # 自定义 API 地址
+
+# ===== RAG 配置 =====
+[rag]
+topk = 5                 # 召回数量
+min_score = 0.6          # 最小相似度分数
