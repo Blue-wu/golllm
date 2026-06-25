@@ -8,7 +8,9 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/golllm/cmd/rag/model"
 	"github.com/golllm/cmd/rag/repository"
@@ -113,10 +115,8 @@ func (s *DocumentService) Upload(file *multipart.FileHeader, title string) (*mod
 func (s *DocumentService) processDocument(doc *model.Document) {
 	log.Printf("[文档 %d] 开始处理向量化...", doc.ID)
 
-	// 更新状态为处理中
 	s.repo.UpdateDocumentStatus(doc.ID, model.DocStatusProcessing, "", 0)
 
-	// 1. 文本切片
 	chunks := s.splitter.Split(doc.Content)
 	log.Printf("[文档 %d] 切片完成，共 %d 个切片", doc.ID, len(chunks))
 
@@ -125,42 +125,41 @@ func (s *DocumentService) processDocument(doc *model.Document) {
 		return
 	}
 
-	// 2. 生成向量并入库
-	var vectorIDs []string
 	var chunkModels []model.DocumentChunk
+	baseID := time.Now().UnixNano()
 
 	for i, chunk := range chunks {
-		// 生成 Embedding
-		vec, err := s.embedder.Embed(ctx, chunk.Content)
+		vec, err := s.embedder.Embedding(s.ctx, chunk.Content)
 		if err != nil {
 			log.Printf("[文档 %d] 向量化失败: %v", doc.ID, err)
 			continue
 		}
 
-		// 插入向量数据库
-		id := fmt.Sprintf("doc_%d_chunk_%d", doc.ID, i)
-		_, err = s.vectorDB.Insert(ctx, []string{id}, [][]float32{vec})
+		vecID := baseID + int64(i)
+		meta := map[string]interface{}{
+			"doc_id":    doc.ID,
+			"chunk_index": i,
+			"file_name":  doc.FileName,
+		}
+		err = s.vectorDB.Insert(s.ctx, vecID, vec, chunk.Content, meta)
 		if err != nil {
 			log.Printf("[文档 %d] 向量入库失败: %v", doc.ID, err)
 			continue
 		}
 
-		vectorIDs = append(vectorIDs, id)
 		chunkModels = append(chunkModels, model.DocumentChunk{
 			DocID:      doc.ID,
 			Content:    chunk.Content,
 			ChunkIndex: i,
 			Metadata:   chunk.Metadata,
-			VectorID:   id,
+			VectorID:   strconv.FormatInt(vecID, 10),
 		})
 	}
 
-	// 3. 保存切片信息到数据库
 	for _, chunk := range chunkModels {
 		s.repo.CreateChunk(&chunk)
 	}
 
-	// 4. 更新文档状态
 	s.repo.UpdateDocumentStatus(doc.ID, model.DocStatusCompleted, "", len(chunkModels))
 	log.Printf("[文档 %d] 处理完成，共入库 %d 个切片", doc.ID, len(chunkModels))
 }
@@ -210,20 +209,21 @@ func (s *DocumentService) Get(id int64) (*model.DocumentDetailResponse, error) {
 
 // Delete 删除文档
 func (s *DocumentService) Delete(id int64) error {
-	// 获取所有切片
 	chunks, err := s.repo.GetChunksByDocID(id)
 	if err != nil {
 		return err
 	}
 
-	// 删除向量
+	var vecIDs []int64
 	for _, chunk := range chunks {
-		if chunk.VectorID != "" {
-			s.vectorDB.Delete(ctx, []string{chunk.VectorID})
+		if vecID, parseErr := strconv.ParseInt(chunk.VectorID, 10, 64); parseErr == nil {
+			vecIDs = append(vecIDs, vecID)
 		}
 	}
+	if len(vecIDs) > 0 {
+		s.vectorDB.Delete(s.ctx, vecIDs)
+	}
 
-	// 删除数据库记录（会自动删除切片）
 	if err := s.repo.DeleteChunksByDocID(id); err != nil {
 		return err
 	}

@@ -19,8 +19,8 @@ type Config struct {
 
 // Client Milvus 客户端封装
 type Client struct {
-	config         Config          // 客户端配置
-	milvusClient   client.Client   // Milvus SDK 原生客户端
+	config       Config        // 客户端配置
+	milvusClient client.Client // Milvus SDK 原生客户端
 }
 
 // NewClient 创建新的 Milvus 客户端
@@ -51,32 +51,27 @@ func (c *Client) Close() error {
 //   - vector: 向量字段（FloatVector）
 //   - text: 原始文本（VarChar）
 //   - metadata: 元数据（JSON）
-func (c *Client) CreateCollection(ctx context.Context, indexType string) error {
-	// 创建 ID 字段：主键，非自增
+func (c *Client) CreateCollection(ctx context.Context) error {
 	idField := entity.NewField().
 		WithName("id").
 		WithDataType(entity.FieldTypeInt64).
 		WithIsPrimaryKey(true).
 		WithIsAutoID(false)
 
-	// 创建向量字段：浮点向量，维度由配置决定
 	vectorField := entity.NewField().
 		WithName("vector").
 		WithDataType(entity.FieldTypeFloatVector).
 		WithDim(int64(c.config.Dim))
 
-	// 创建文本字段：最大长度 65535 字符
 	textField := entity.NewField().
 		WithName("text").
 		WithDataType(entity.FieldTypeVarChar).
 		WithMaxLength(65535)
 
-	// 创建元数据字段：JSON 格式
 	metadataField := entity.NewField().
 		WithName("metadata").
 		WithDataType(entity.FieldTypeJSON)
 
-	// 构建集合 Schema
 	schema := entity.NewSchema().
 		WithName(c.config.Collection).
 		WithDescription("Document embedding collection").
@@ -85,14 +80,12 @@ func (c *Client) CreateCollection(ctx context.Context, indexType string) error {
 		WithField(textField).
 		WithField(metadataField)
 
-	// 创建集合，shardNum=1 表示单分片
 	err := c.milvusClient.CreateCollection(ctx, schema, 1)
 	if err != nil {
 		return fmt.Errorf("failed to create collection: %w", err)
 	}
 
-	// 创建索引（HNSW 索引，搜索前必须创建索引）
-	idx, err := entity.NewIndexHNSW(entity.L2, 16, 128)
+	idx, err := entity.NewIndexHNSW(entity.L2, 16, 200)
 	if err != nil {
 		return fmt.Errorf("failed to create index: %w", err)
 	}
@@ -101,7 +94,6 @@ func (c *Client) CreateCollection(ctx context.Context, indexType string) error {
 		return fmt.Errorf("failed to create index: %w", err)
 	}
 
-	// 加载集合到内存（搜索前必须加载）
 	err = c.milvusClient.LoadCollection(ctx, c.config.Collection, false)
 	if err != nil {
 		return fmt.Errorf("failed to load collection: %w", err)
@@ -273,6 +265,7 @@ func (c *Client) GetByID(ctx context.Context, id int64) (*SearchResult, error) {
 //   - queryVector: 查询向量
 //   - limit: 返回结果数量
 //   - params: 搜索参数（如 ef）
+//
 // 返回: 按相似度排序的结果列表
 func (c *Client) Search(ctx context.Context, queryVector []float32, limit int, params map[string]string) ([]SearchResult, error) {
 	// HNSW 搜索参数：ef 表示搜索时的候选数量
@@ -305,9 +298,7 @@ func (c *Client) Search(ctx context.Context, queryVector []float32, limit int, p
 	return parseSearchResults(&results[0]), nil
 }
 
-// DeleteByID 根据 ID 删除记录
-func (c *Client) DeleteByID(ctx context.Context, ids []int64) error {
-	// 构建删除表达式：id in [1,2,3]
+func (c *Client) Delete(ctx context.Context, ids []int64) error {
 	expr := fmt.Sprintf("id in [%s]", joinInts(ids))
 	err := c.milvusClient.Delete(ctx, c.config.Collection, "", expr)
 	if err != nil {
@@ -326,13 +317,13 @@ func (c *Client) Flush(ctx context.Context) error {
 	return c.milvusClient.LoadCollection(ctx, c.config.Collection, false)
 }
 
-// SearchResult 搜索结果
+// SearchResult 搜索结果结构体
 type SearchResult struct {
-	ID       int64    // 数据 ID
-	Score    float32  // 相似度分数（距离，越小越相似）
-	Text     string   // 原始文本
+	ID       int64     // 数据 ID
 	Vector   []float32 // 向量数据
-	Metadata string   // 元数据（JSON 字符串）
+	Score    float32   // 相似度分数（距离，越小越相似）
+	Text     string    // 原始文本
+	Metadata string    // 元数据（JSON 字符串）
 }
 
 // parseQueryResultSet 解析查询结果集
@@ -366,7 +357,7 @@ func parseSearchResults(result *client.SearchResult) []SearchResult {
 	for i := 0; i < result.ResultCount; i++ {
 		results = append(results, SearchResult{
 			ID:       idCol.Data()[i],
-			Score:    result.Scores[i],  // 相似度分数
+			Score:    result.Scores[i],
 			Text:     textCol.Data()[i],
 			Vector:   vecCol.Data()[i],
 			Metadata: string(metaCol.Data()[i]),

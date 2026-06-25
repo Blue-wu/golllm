@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -16,7 +17,6 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-// RAGService RAG 服务
 type RAGService struct {
 	ctx       context.Context
 	embedder  *embedding.Client
@@ -26,19 +26,23 @@ type RAGService struct {
 	llmClient *openai.Client
 }
 
-// NewRAGService 创建 RAG 服务
 func NewRAGService(
 	embedder *embedding.Client,
 	vectorDB vector.VectorClient,
 	repo *repository.SQLiteRepository,
+	ollamaURL string,
 ) *RAGService {
+	llmConfig := openai.DefaultConfig("ollama")
+	llmConfig.BaseURL = ollamaURL + "/v1"
+	llmClient := openai.NewClientWithConfig(llmConfig)
+
 	return &RAGService{
 		ctx:       context.Background(),
 		embedder:  embedder,
 		vectorDB:  vectorDB,
 		repo:      repo,
 		prompt:    prompt.NewRAGPromptTemplate(),
-		llmClient: openai.NewClient(),
+		llmClient: llmClient,
 	}
 }
 
@@ -115,7 +119,7 @@ func (s *RAGService) Ask(req *model.AskRequest) (*model.AskResponse, error) {
 	)
 	if err != nil {
 		// 如果是本地模型，尝试使用 Ollama
-		return s.askWithLocalModel(req, references)
+		return s.askWithLocalModel(sessionID, req, references)
 	}
 
 	answer := resp.Choices[0].Message.Content
@@ -152,7 +156,7 @@ func (s *RAGService) Ask(req *model.AskRequest) (*model.AskResponse, error) {
 }
 
 // askWithLocalModel 使用本地模型问答
-func (s *RAGService) askWithLocalModel(req *model.AskRequest, references []model.Reference) (*model.AskResponse, error) {
+func (s *RAGService) askWithLocalModel(sessionID string, req *model.AskRequest, references []model.Reference) (*model.AskResponse, error) {
 	// 构建完整的 prompt
 	fullPrompt, _ := s.prompt.BuildFullPrompt(req.Question, references)
 
@@ -176,19 +180,19 @@ func (s *RAGService) askWithLocalModel(req *model.AskRequest, references []model
 
 	// 保存对话记录
 	s.repo.CreateMessage(&model.ChatMessage{
-		SessionID:  req.SessionID,
+		SessionID:  sessionID,
 		Role:       model.RoleUser,
 		Content:    req.Question,
 		References: references,
 	})
 	s.repo.CreateMessage(&model.ChatMessage{
-		SessionID: req.SessionID,
+		SessionID: sessionID,
 		Role:      model.RoleAssistant,
 		Content:   answer,
 	})
 
 	return &model.AskResponse{
-		SessionID:  req.SessionID,
+		SessionID:  sessionID,
 		Question:   req.Question,
 		Answer:     answer,
 		References: references,
@@ -198,42 +202,42 @@ func (s *RAGService) askWithLocalModel(req *model.AskRequest, references []model
 
 // Recall 召回相关文档
 func (s *RAGService) Recall(question string, topK int) ([]model.Reference, error) {
-	// 1. 生成问题的向量
-	queryVec, err := s.embedder.Embed(s.ctx, question)
+	queryVec, err := s.embedder.Embedding(s.ctx, question)
 	if err != nil {
 		return nil, fmt.Errorf("问题向量化失败: %w", err)
 	}
 
-	// 2. 向量检索
 	results, err := s.vectorDB.Search(s.ctx, queryVec, topK, map[string]string{"ef": "128"})
 	if err != nil {
 		return nil, fmt.Errorf("向量检索失败: %w", err)
 	}
 
-	// 3. 转换结果
 	references := make([]model.Reference, 0)
 	for _, result := range results {
-		// 过滤低相似度结果（余弦距离阈值）
-		if result.Score > 1.0 { // L2 距离，越小越相似
+		if result.Score > 1.0 {
 			continue
 		}
 
-		// 解析元数据获取文档ID
+		var metadata map[string]interface{}
+		json.Unmarshal([]byte(result.Metadata), &metadata)
+
 		docID := int64(0)
-		if docIDStr, ok := result.Metadata["doc_id"]; ok {
-			switch v := docIDStr.(type) {
-			case float64:
-				docID = int64(v)
-			case int64:
-				docID = v
+		if metadata != nil {
+			if docIDStr, ok := metadata["doc_id"]; ok {
+				switch v := docIDStr.(type) {
+				case float64:
+					docID = int64(v)
+				case int64:
+					docID = v
+				}
 			}
 		}
 
 		references = append(references, model.Reference{
 			DocID:    docID,
 			Content:  result.Text,
-			Score:    result.Score,
-			FileName: getFileName(result.Metadata),
+			Score:    float64(result.Score),
+			FileName: getFileName(metadata),
 		})
 	}
 
@@ -264,6 +268,9 @@ func (s *RAGService) GetHistory(sessionID string) (*model.ChatHistoryResponse, e
 
 // getFileName 从元数据中获取文件名
 func getFileName(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return "未知文档"
+	}
 	if fn, ok := metadata["file_name"]; ok {
 		if str, ok := fn.(string); ok {
 			return str
@@ -274,7 +281,6 @@ func getFileName(metadata map[string]interface{}) string {
 
 // ExtractKeywords 提取关键词（用于增强检索）
 func (s *RAGService) ExtractKeywords(question string) []string {
-	// 简单的关键词提取，实际可用 NLP 库
 	stopWords := map[string]bool{
 		"的": true, "了": true, "是": true, "在": true, "和": true,
 		"我": true, "你": true, "他": true, "她": true, "它": true,

@@ -103,7 +103,7 @@ func importDocument(c *cli.Context) error {
 
 	if !hasCollection {
 		log.Printf("Creating collection: %s", collection)
-		if err := vecClient.CreateCollection(context.Background(), ""); err != nil {
+		if err := vecClient.CreateCollection(context.Background()); err != nil {
 			return fmt.Errorf("failed to create collection: %w", err)
 		}
 		log.Printf("Creating HNSW index...")

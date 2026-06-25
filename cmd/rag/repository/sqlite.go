@@ -8,7 +8,7 @@ import (
 
 	"github.com/golllm/cmd/rag/model"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // SQLiteRepository SQLite 数据存储
@@ -21,7 +21,7 @@ func NewSQLite(dbPath string) (*SQLiteRepository, error) {
 	// 确保目录存在
 	// os.MkdirAll(filepath.Dir(dbPath), 0755)
 
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL")
+	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL")
 	if err != nil {
 		return nil, fmt.Errorf("打开数据库失败: %w", err)
 	}
@@ -92,7 +92,7 @@ func (r *SQLiteRepository) initTables() error {
 			session_id TEXT NOT NULL,
 			role TEXT NOT NULL,
 			content TEXT NOT NULL,
-			references TEXT,
+			"references" TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (session_id) REFERENCES chat_sessions(session_id) ON DELETE CASCADE
 		)
@@ -267,7 +267,7 @@ func (r *SQLiteRepository) UpdateSessionTitle(sessionID, title string) error {
 // GetChatHistory 获取聊天历史
 func (r *SQLiteRepository) GetChatHistory(sessionID string) ([]model.ChatMessage, error) {
 	rows, err := r.db.Query(`
-		SELECT id, session_id, role, content, references, created_at
+		SELECT id, session_id, role, content, "references", created_at
 		FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC
 	`, sessionID)
 	if err != nil {
@@ -292,7 +292,7 @@ func (r *SQLiteRepository) GetChatHistory(sessionID string) ([]model.ChatMessage
 func (r *SQLiteRepository) CreateMessage(msg *model.ChatMessage) error {
 	refs, _ := json.Marshal(msg.References)
 	_, err := r.db.Exec(`
-		INSERT INTO chat_messages (session_id, role, content, references) VALUES (?, ?, ?, ?)
+		INSERT INTO chat_messages (session_id, role, content, "references") VALUES (?, ?, ?, ?)
 	`, msg.SessionID, msg.Role, msg.Content, string(refs))
 	return err
 }

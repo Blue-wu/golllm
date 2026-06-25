@@ -10,7 +10,7 @@ import (
 
 // RAGPromptTemplate RAG 提示词模板
 type RAGPromptTemplate struct {
-	systemTemplate string
+	systemTemplate   string
 	questionTemplate string
 }
 
@@ -59,7 +59,7 @@ func (t *RAGPromptTemplate) BuildSystemPrompt(references []model.Reference) (str
 	var systemPrompt bytes.Buffer
 	tmpl.Execute(&systemPrompt, map[string]interface{}{
 		"References": buf.String(),
-		"Sources":   sources.String(),
+		"Sources":    sources.String(),
 	})
 
 	return systemPrompt.String(), sources.String()

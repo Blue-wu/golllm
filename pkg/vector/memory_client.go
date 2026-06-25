@@ -11,10 +11,10 @@ import (
 )
 
 type InMemoryClient struct {
-	data      map[int64]*SearchResult
-	mu        sync.RWMutex
-	config    Config
-	filePath  string
+	data     map[int64]*SearchResult
+	mu       sync.RWMutex
+	config   Config
+	filePath string
 }
 
 func NewInMemoryClient(cfg Config) (*InMemoryClient, error) {
@@ -80,7 +80,7 @@ func (c *InMemoryClient) Close() error {
 	return c.saveToFile()
 }
 
-func (c *InMemoryClient) CreateCollection(ctx context.Context, indexType string) error {
+func (c *InMemoryClient) CreateCollection(ctx context.Context) error {
 	log.Printf("Collection '%s' created successfully", c.config.Collection)
 	return nil
 }
@@ -205,14 +205,12 @@ func (c *InMemoryClient) Search(ctx context.Context, queryVector []float32, limi
 	return results, nil
 }
 
-func (c *InMemoryClient) DeleteByID(ctx context.Context, ids []int64) error {
+func (c *InMemoryClient) Delete(ctx context.Context, ids []int64) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-
 	for _, id := range ids {
 		delete(c.data, id)
 	}
-
 	return nil
 }
 

@@ -35,7 +35,7 @@ func main() {
 
 	switch command {
 	case "create-collection":
-		err := vectorClient.CreateCollection(ctx, "HNSW")
+		err := vectorClient.CreateCollection(ctx)
 		if err != nil {
 			log.Fatalf("Failed to create collection: %v", err)
 		}
@@ -130,7 +130,7 @@ func main() {
 			id, _ := strconv.ParseInt(s, 10, 64)
 			ids = append(ids, id)
 		}
-		err := vectorClient.DeleteByID(ctx, ids)
+		err := vectorClient.Delete(ctx, ids)
 		if err != nil {
 			log.Fatalf("Delete failed: %v", err)
 		}

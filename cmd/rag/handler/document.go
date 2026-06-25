@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/golllm/cmd/rag/model"
 	"github.com/golllm/cmd/rag/service"
 
 	"github.com/gin-gonic/gin"
