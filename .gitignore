@@ -54,6 +54,14 @@ temp/
 # data/
 # *.json
 
+# RAG 运行时数据
+*.db
+data/uploads/
+data/*.md
+cmd/rag/documents.db
+cmd/rag/data/
+cmd/rag/*.exe
+
 # Compiled binaries
 import-cli.exe
 search-cli.exe
