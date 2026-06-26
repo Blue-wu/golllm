@@ -61,6 +61,7 @@ data/*.md
 cmd/rag/documents.db
 cmd/rag/data/
 cmd/rag/*.exe
+cmd/rag/config.toml
 
 # Compiled binaries
 import-cli.exe
