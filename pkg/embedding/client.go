@@ -7,22 +7,23 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/sashabaranov/go-openai"
 )
 
 // Config Embedding 客户端配置
 type Config struct {
-	APIKey    string // API 密钥
-	BaseURL   string // API 基础 URL（用于自定义提供商）
-	Model     string // 模型名称
-	Provider  string // 提供商：openai, deepseek, ollama 等
+	APIKey   string // API 密钥
+	BaseURL  string // API 基础 URL（用于自定义提供商）
+	Model    string // 模型名称
+	Provider string // 提供商：openai, deepseek, ollama 等
 }
 
 // Client Embedding 客户端
 type Client struct {
-	config  Config          // 客户端配置
-	openai  *openai.Client // OpenAI SDK 客户端（兼容 OpenAI 协议）
+	config Config         // 客户端配置
+	openai *openai.Client // OpenAI SDK 客户端（兼容 OpenAI 协议）
 }
 
 // NewClient 创建新的 Embedding 客户端
@@ -45,10 +46,9 @@ func NewClient(cfg Config) *Client {
 		// 使用 OpenAI 兼容接口
 		config := openai.DefaultConfig("ollama")
 		if cfg.BaseURL == "" {
-			config.BaseURL = "http://localhost:11434/v1"
-		} else {
-			config.BaseURL = cfg.BaseURL
+			cfg.BaseURL = "http://localhost:11434/v1"
 		}
+		config.BaseURL = cfg.BaseURL
 		client = openai.NewClientWithConfig(config)
 	case "openai":
 		// OpenAI 官方 API
@@ -70,6 +70,7 @@ func NewClient(cfg Config) *Client {
 // 参数:
 //   - ctx: 上下文
 //   - texts: 文本列表
+//
 // 返回: 向量列表（每个文本对应一个向量）
 func (c *Client) Embeddings(ctx context.Context, texts []string) ([][]float32, error) {
 	// Ollama 使用原生 API（更稳定）
@@ -98,9 +99,9 @@ func (c *Client) Embeddings(ctx context.Context, texts []string) ([][]float32, e
 
 // ollamaEmbeddings 使用 Ollama 原生 API 生成向量
 func (c *Client) ollamaEmbeddings(ctx context.Context, texts []string) ([][]float32, error) {
-	baseURL := c.config.BaseURL
-	if baseURL == "" {
-		baseURL = "http://localhost:11434"
+	baseURL := "http://localhost:11434"
+	if c.config.BaseURL != "" {
+		baseURL = strings.TrimSuffix(c.config.BaseURL, "/v1")
 	}
 
 	vectors := make([][]float32, 0, len(texts))
@@ -156,6 +157,7 @@ func (c *Client) ollamaEmbeddings(ctx context.Context, texts []string) ([][]floa
 // 参数:
 //   - ctx: 上下文
 //   - text: 文本
+//
 // 返回: 向量
 func (c *Client) Embedding(ctx context.Context, text string) ([]float32, error) {
 	vectors, err := c.Embeddings(ctx, []string{text})

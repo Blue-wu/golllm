@@ -21,7 +21,7 @@ import (
 )
 
 func main() {
-	cfg, err := config.LoadConfig("config.toml")
+	cfg, err := config.LoadConfig("./config/config.toml")
 	if err != nil {
 		log.Printf("配置加载失败: %v，使用默认配置", err)
 		// 使用默认配置

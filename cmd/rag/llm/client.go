@@ -16,7 +16,7 @@ import (
 type Client interface {
 	// Chat 发送对话请求
 	Chat(ctx context.Context, messages []Message) (string, error)
-	// ChatStream 发送流式对话请求
+	//    ChatStream 发送流式对话请求
 	ChatStream(ctx context.Context, messages []Message, callback func(string)) error
 	// GetModel 获取当前模型名称
 	GetModel() string

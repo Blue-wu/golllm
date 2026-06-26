@@ -1,0 +1,28 @@
+# RAG 知识库系统配置文件
+
+# ===== 服务器配置 =====
+[server]
+host = "0.0.0.0"
+port = 8080
+
+# ===== 向量数据库配置 =====
+[vector]
+type = "memory"
+addr = "localhost:19530"
+collection = "documents"
+dim = 768
+
+# ===== Embedding 模型配置 =====
+[embedding]
+provider = "ollama"
+model = "nomic-embed-text"
+
+# ===== LLM 模型配置 =====
+[llm]
+provider = "ollama"
+model = "qwen2.5:7b"
+
+# ===== RAG 配置 =====
+[rag]
+topk = 5
+min_score = 0.6
