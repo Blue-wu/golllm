@@ -1,0 +1,43 @@
+
+# ===== 服务器配置 =====
+[server]
+host = "0.0.0.0"
+port = 8080
+
+# ===== 向量数据库配置 =====
+[vector]
+type = "memory"          # 可选: milvus, memory
+addr = "localhost:19530"  # Milvus 地址
+collection = "documents"   # 集合名称
+dim = 768                # 向量维度 (nomic-embed-text=768, bge-m3=1024)
+
+# ===== Embedding 模型配置 =====
+[embedding]
+provider = "ollama"       # 可选: ollama, openai, deepseek
+model = "nomic-embed-text"
+# api_key = ""           # API Key (通过环境变量 OPENAI_API_KEY 设置)
+# base_url = ""          # 自定义 API 地址
+
+# ===== LLM 模型配置 =====
+[llm]
+provider = "ollama"      # 可选: ollama, openai, deepseek
+model = "llama3.2:latest"     # Ollama 模型名
+# api_key = ""           # API Key (通过环境变量 OPENAI_API_KEY 设置)
+# base_url = ""          # 自定义 API 地址
+
+# ===== RAG 配置 =====
+[rag]
+topk = 5                 # 召回数量
+min_score = 0.6          # 最小相似度分数
+
+# ===== Redis 配置 =====
+[redis]
+addr = "localhost:6379"   # Redis 地址
+password = ""             # Redis 密码
+db = 0                    # 数据库编号
+
+# ===== 会话管理配置 =====
+[chat]
+max_tokens = 8192         # 最大 Token 数
+session_timeout = 3600    # 会话过期时间（秒）
+max_history_size = 100    # 最大历史消息数

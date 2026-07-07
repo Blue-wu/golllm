@@ -16,14 +16,31 @@ type Document struct {
 	UpdatedAt   time.Time `json:"updated_at"`  // 更新时间
 }
 
-// DocumentChunk 文档切片模型
+// DocumentChunk 文档切片模型（子块）
 type DocumentChunk struct {
 	ID         int64                  `json:"id"`         // 切片ID
 	DocID      int64                  `json:"doc_id"`     // 文档ID
+	ParentID   int64                  `json:"parent_id"`  // 父块ID
 	Content    string                 `json:"content"`    // 切片内容
 	ChunkIndex int                    `json:"chunk_index"`// 切片索引
 	Metadata   map[string]interface{} `json:"metadata"`   // 元数据
-	VectorID   string                 `json:"vector_id"`  // Milvus 中的向量ID
+	VectorID   string                 `json:"vector_id"`  // 向量ID
+}
+
+// ParentChunk 父块模型
+type ParentChunk struct {
+	ID        int64                  `json:"id"`         // 父块ID
+	DocID     int64                  `json:"doc_id"`     // 文档ID
+	Content   string                 `json:"content"`    // 父块内容
+	Heading   string                 `json:"heading"`    // 标题
+	Metadata  map[string]interface{} `json:"metadata"`   // 元数据
+}
+
+// SemanticChunk 语义切片结果
+type SemanticChunk struct {
+	ParentContent string   // 父块内容
+	ChildContents []string // 子块内容列表
+	Heading       string   // 标题
 }
 
 // UploadRequest 文档上传请求

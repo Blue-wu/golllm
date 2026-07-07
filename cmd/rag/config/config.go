@@ -9,9 +9,11 @@ import (
 type Config struct {
 	Server    ServerConfig
 	VectorDB  VectorDBConfig
+	Redis     RedisConfig
 	Embedding EmbeddingConfig
 	LLM       LLMConfig
 	RAG       RAGConfig
+	Chat      ChatConfig
 }
 
 type ServerConfig struct {
@@ -45,6 +47,18 @@ type RAGConfig struct {
 	MinScore float32
 }
 
+type RedisConfig struct {
+	Addr     string
+	Password string
+	DB       int
+}
+
+type ChatConfig struct {
+	MaxTokens      int
+	SessionTimeout int
+	MaxHistorySize int
+}
+
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -54,9 +68,11 @@ func LoadConfig(path string) (*Config, error) {
 	cfg := &Config{
 		Server:    ServerConfig{Host: "localhost", Port: 8080},
 		VectorDB:  VectorDBConfig{Type: "milvus", Addr: "localhost:19530", Collection: "documents", Dim: 768},
+		Redis:     RedisConfig{Addr: "localhost:6379", Password: "", DB: 0},
 		Embedding: EmbeddingConfig{Provider: "ollama", Model: "nomic-embed-text"},
 		LLM:       LLMConfig{Provider: "ollama", Model: "qwen2.5:7b"},
 		RAG:       RAGConfig{TopK: 5, MinScore: 0.5},
+		Chat:      ChatConfig{MaxTokens: 4096, SessionTimeout: 3600, MaxHistorySize: 50},
 	}
 
 	lines := strings.Split(string(data), "\n")
@@ -120,6 +136,18 @@ func LoadConfig(path string) (*Config, error) {
 			fmt.Sscanf(value, "%d", &cfg.RAG.TopK)
 		case "rag.min_score":
 			fmt.Sscanf(value, "%f", &cfg.RAG.MinScore)
+		case "redis.addr":
+			cfg.Redis.Addr = value
+		case "redis.password":
+			cfg.Redis.Password = value
+		case "redis.db":
+			fmt.Sscanf(value, "%d", &cfg.Redis.DB)
+		case "chat.max_tokens":
+			fmt.Sscanf(value, "%d", &cfg.Chat.MaxTokens)
+		case "chat.session_timeout":
+			fmt.Sscanf(value, "%d", &cfg.Chat.SessionTimeout)
+		case "chat.max_history_size":
+			fmt.Sscanf(value, "%d", &cfg.Chat.MaxHistorySize)
 		}
 	}
 

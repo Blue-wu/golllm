@@ -1,0 +1,3 @@
+[mcp_servers.placed]
+command = "npx"
+args = ["@exidian/placed-mcp"]
