@@ -7,13 +7,18 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig
-	VectorDB  VectorDBConfig
-	Redis     RedisConfig
-	Embedding EmbeddingConfig
-	LLM       LLMConfig
-	RAG       RAGConfig
-	Chat      ChatConfig
+	Server         ServerConfig
+	VectorDB       VectorDBConfig
+	Redis          RedisConfig
+	Embedding      EmbeddingConfig
+	LLM            LLMConfig
+	RAG            RAGConfig
+	Chat           ChatConfig
+	Retry          RetryConfig
+	CircuitBreaker CircuitBreakerConfig
+	Fallback       FallbackConfig
+	RateLimit      RateLimitConfig
+	AsyncTask      AsyncTaskConfig
 }
 
 type ServerConfig struct {
@@ -59,6 +64,46 @@ type ChatConfig struct {
 	MaxHistorySize int
 }
 
+type RetryConfig struct {
+	MaxRetries   int
+	InitialDelay int
+	MaxDelay     int
+	Multiplier   int
+	Timeout      int
+}
+
+type CircuitBreakerConfig struct {
+	Enabled             bool
+	FailureThreshold    int
+	WindowDuration      int
+	MinRequests         int
+	SleepWindow         int
+	HalfOpenMaxRequests int
+}
+
+type FallbackConfig struct {
+	Enabled          bool
+	FallbackProvider string
+	FallbackModel    string
+}
+
+type RateLimitConfig struct {
+	GlobalMaxQPS        int
+	GlobalMaxConcurrent int
+	PerUserMaxQPS       int
+	PerUserMaxDaily     int
+	PerIPMaxQPS         int
+	PerIPMaxConcurrent  int
+}
+
+type AsyncTaskConfig struct {
+	Enabled       bool
+	MaxWorkers    int
+	QueueCapacity int
+	MaxRetries    int
+	RetryDelay    int
+}
+
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -73,6 +118,41 @@ func LoadConfig(path string) (*Config, error) {
 		LLM:       LLMConfig{Provider: "ollama", Model: "qwen2.5:7b"},
 		RAG:       RAGConfig{TopK: 5, MinScore: 0.5},
 		Chat:      ChatConfig{MaxTokens: 4096, SessionTimeout: 3600, MaxHistorySize: 50},
+		Retry: RetryConfig{
+			MaxRetries:   3,
+			InitialDelay: 1000,
+			MaxDelay:     10000,
+			Multiplier:   2,
+			Timeout:      60000,
+		},
+		CircuitBreaker: CircuitBreakerConfig{
+			Enabled:             true,
+			FailureThreshold:    50,
+			WindowDuration:      60000,
+			MinRequests:         10,
+			SleepWindow:         30000,
+			HalfOpenMaxRequests: 3,
+		},
+		Fallback: FallbackConfig{
+			Enabled:          true,
+			FallbackProvider: "ollama",
+			FallbackModel:    "qwen2:7b",
+		},
+		RateLimit: RateLimitConfig{
+			GlobalMaxQPS:        100,
+			GlobalMaxConcurrent: 500,
+			PerUserMaxQPS:       20,
+			PerUserMaxDaily:     1000,
+			PerIPMaxQPS:         30,
+			PerIPMaxConcurrent:  10,
+		},
+		AsyncTask: AsyncTaskConfig{
+			Enabled:       true,
+			MaxWorkers:    4,
+			QueueCapacity: 1000,
+			MaxRetries:    3,
+			RetryDelay:    5000,
+		},
 	}
 
 	lines := strings.Split(string(data), "\n")
@@ -148,6 +228,56 @@ func LoadConfig(path string) (*Config, error) {
 			fmt.Sscanf(value, "%d", &cfg.Chat.SessionTimeout)
 		case "chat.max_history_size":
 			fmt.Sscanf(value, "%d", &cfg.Chat.MaxHistorySize)
+		case "retry.max_retries":
+			fmt.Sscanf(value, "%d", &cfg.Retry.MaxRetries)
+		case "retry.initial_delay":
+			fmt.Sscanf(value, "%d", &cfg.Retry.InitialDelay)
+		case "retry.max_delay":
+			fmt.Sscanf(value, "%d", &cfg.Retry.MaxDelay)
+		case "retry.multiplier":
+			fmt.Sscanf(value, "%d", &cfg.Retry.Multiplier)
+		case "retry.timeout":
+			fmt.Sscanf(value, "%d", &cfg.Retry.Timeout)
+		case "circuit_breaker.enabled":
+			fmt.Sscanf(value, "%t", &cfg.CircuitBreaker.Enabled)
+		case "circuit_breaker.failure_threshold":
+			fmt.Sscanf(value, "%d", &cfg.CircuitBreaker.FailureThreshold)
+		case "circuit_breaker.window_duration":
+			fmt.Sscanf(value, "%d", &cfg.CircuitBreaker.WindowDuration)
+		case "circuit_breaker.min_requests":
+			fmt.Sscanf(value, "%d", &cfg.CircuitBreaker.MinRequests)
+		case "circuit_breaker.sleep_window":
+			fmt.Sscanf(value, "%d", &cfg.CircuitBreaker.SleepWindow)
+		case "circuit_breaker.half_open_max_requests":
+			fmt.Sscanf(value, "%d", &cfg.CircuitBreaker.HalfOpenMaxRequests)
+		case "fallback.enabled":
+			fmt.Sscanf(value, "%t", &cfg.Fallback.Enabled)
+		case "fallback.fallback_provider":
+			cfg.Fallback.FallbackProvider = value
+		case "fallback.fallback_model":
+			cfg.Fallback.FallbackModel = value
+		case "rate_limit.global_max_qps":
+			fmt.Sscanf(value, "%d", &cfg.RateLimit.GlobalMaxQPS)
+		case "rate_limit.global_max_concurrent":
+			fmt.Sscanf(value, "%d", &cfg.RateLimit.GlobalMaxConcurrent)
+		case "rate_limit.per_user_max_qps":
+			fmt.Sscanf(value, "%d", &cfg.RateLimit.PerUserMaxQPS)
+		case "rate_limit.per_user_max_daily":
+			fmt.Sscanf(value, "%d", &cfg.RateLimit.PerUserMaxDaily)
+		case "rate_limit.per_ip_max_qps":
+			fmt.Sscanf(value, "%d", &cfg.RateLimit.PerIPMaxQPS)
+		case "rate_limit.per_ip_max_concurrent":
+			fmt.Sscanf(value, "%d", &cfg.RateLimit.PerIPMaxConcurrent)
+		case "async_task.enabled":
+			fmt.Sscanf(value, "%t", &cfg.AsyncTask.Enabled)
+		case "async_task.max_workers":
+			fmt.Sscanf(value, "%d", &cfg.AsyncTask.MaxWorkers)
+		case "async_task.queue_capacity":
+			fmt.Sscanf(value, "%d", &cfg.AsyncTask.QueueCapacity)
+		case "async_task.max_retries":
+			fmt.Sscanf(value, "%d", &cfg.AsyncTask.MaxRetries)
+		case "async_task.retry_delay":
+			fmt.Sscanf(value, "%d", &cfg.AsyncTask.RetryDelay)
 		}
 	}
 

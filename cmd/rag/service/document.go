@@ -13,6 +13,7 @@ import (
 
 	"github.com/golllm/cmd/rag/model"
 	"github.com/golllm/cmd/rag/repository"
+	"github.com/golllm/cmd/rag/stability"
 	"github.com/golllm/pkg/embedding"
 	"github.com/golllm/pkg/text"
 	"github.com/golllm/pkg/vector"
@@ -31,6 +32,7 @@ type DocumentService struct {
 	semanticSplit *text.SemanticSplitter       // 语义切片器，基于相似度进行智能切片
 	repo          *repository.SQLiteRepository // 数据仓储，用于文档和切片的持久化
 	uploadDir     string                       // 文件上传目录
+	taskQueue     *stability.TaskQueue         // 异步任务队列，用于文档向量化任务
 }
 
 // NewDocumentService 创建文档服务实例
@@ -42,8 +44,8 @@ func NewDocumentService(
 	embedder *embedding.Client,
 	vectorDB vector.VectorClient,
 	repo *repository.SQLiteRepository,
+	taskQueue *stability.TaskQueue,
 ) *DocumentService {
-	// 封装Embedding函数，适配语义切片器的接口
 	embedFunc := func(texts []string) ([][]float32, error) {
 		var result [][]float32
 		for _, text := range texts {
@@ -63,6 +65,7 @@ func NewDocumentService(
 		semanticSplit: text.NewSemanticSplitter(embedFunc),
 		repo:          repo,
 		uploadDir:     "./data/uploads",
+		taskQueue:     taskQueue,
 	}
 }
 
@@ -132,8 +135,15 @@ func (s *DocumentService) Upload(file *multipart.FileHeader, title string) (*mod
 	}
 	doc.ID = docID
 
-	// 启动后台协程处理文档向量化，不阻塞上传响应
-	go s.processDocument(doc)
+	if s.taskQueue != nil {
+		_, err := s.taskQueue.Submit(stability.TaskTypeVectorize, doc)
+		if err != nil {
+			log.Printf("文档向量化任务入队失败: %v", err)
+			go s.processDocument(doc)
+		}
+	} else {
+		go s.processDocument(doc)
+	}
 
 	return &model.UploadResponse{
 		DocumentID: docID,
@@ -153,25 +163,23 @@ func (s *DocumentService) Upload(file *multipart.FileHeader, title string) (*mod
 //
 // 参数：
 //   - doc: 待处理的文档对象
-func (s *DocumentService) processDocument(doc *model.Document) {
+func (s *DocumentService) processDocument(doc *model.Document) error {
 	log.Printf("[文档 %d] 开始处理向量化...", doc.ID)
 
-	// 更新文档状态为处理中
 	s.repo.UpdateDocumentStatus(doc.ID, model.DocStatusProcessing, "", 0)
 
-	// 使用语义切片器进行智能切片，生成父子块结构
 	semanticChunks, err := s.semanticSplit.Split(doc.Content)
 	if err != nil {
 		log.Printf("[文档 %d] 语义切片失败: %v", doc.ID, err)
 		s.repo.UpdateDocumentStatus(doc.ID, model.DocStatusFailed, fmt.Sprintf("语义切片失败: %v", err), 0)
-		return
+		return err
 	}
 
 	log.Printf("[文档 %d] 语义切片完成，共 %d 个父块", doc.ID, len(semanticChunks))
 
 	if len(semanticChunks) == 0 {
 		s.repo.UpdateDocumentStatus(doc.ID, doc.Status, "文档为空或切片失败", 0)
-		return
+		return nil
 	}
 
 	totalChunks := 0
@@ -239,6 +247,7 @@ func (s *DocumentService) processDocument(doc *model.Document) {
 	// 更新文档状态为完成，并记录切片数量
 	s.repo.UpdateDocumentStatus(doc.ID, model.DocStatusCompleted, "", totalChunks)
 	log.Printf("[文档 %d] 处理完成，共入库 %d 个子块，%d 个父块", doc.ID, totalChunks, len(semanticChunks))
+	return nil
 }
 
 // List 获取文档列表

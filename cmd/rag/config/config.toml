@@ -41,3 +41,43 @@ db = 0                    # 数据库编号
 max_tokens = 8192         # 最大 Token 数
 session_timeout = 3600    # 会话过期时间（秒）
 max_history_size = 100    # 最大历史消息数
+
+# ===== 重试配置 =====
+[retry]
+max_retries = 3           # 最大重试次数
+initial_delay = 1000      # 初始重试间隔（毫秒）
+max_delay = 10000         # 最大重试间隔（毫秒）
+multiplier = 2            # 退避乘数
+timeout = 60000           # 请求超时时间（毫秒）
+
+# ===== 熔断配置 =====
+[circuit_breaker]
+enabled = true            # 是否启用熔断
+failure_threshold = 50    # 错误率阈值（百分比）
+window_duration = 60000   # 滑动窗口时长（毫秒）
+min_requests = 10         # 窗口内最小请求数
+sleep_window = 30000      # 熔断后休眠时间（毫秒）
+half_open_max_requests = 3 # 半开状态最大请求数
+
+# ===== 降级配置 =====
+[fallback]
+enabled = true            # 是否启用降级
+fallback_provider = "ollama" # 降级模型提供商
+fallback_model = "qwen2:7b" # 降级模型名称
+
+# ===== 限流配置 =====
+[rate_limit]
+global_max_qps = 100      # 全局限流 QPS
+global_max_concurrent = 500 # 全局最大并发数
+per_user_max_qps = 20     # 单用户限流 QPS
+per_user_max_daily = 1000 # 单用户每日最大调用次数
+per_ip_max_qps = 30       # 单IP限流 QPS
+per_ip_max_concurrent = 10 # 单IP最大并发数
+
+# ===== 异步任务配置 =====
+[async_task]
+enabled = true            # 是否启用异步任务
+max_workers = 4           # 最大工作协程数
+queue_capacity = 1000     # 任务队列容量
+max_retries = 3           # 任务最大重试次数
+retry_delay = 5000        # 任务重试间隔（毫秒）
